@@ -24,6 +24,11 @@ const sendingAnswer = ref(false);
 
 const ticketId = Number(route.params.id);
 
+// Agent Loading
+const agents = ref<{id: number, name: string}[]>([]);
+const selectedAgent = ref<string | number>('');
+const loadingAgents = ref(false);
+
 // --- Computed Logic for ACL & Lifecycle ---
 
 const canEdit = computed(() => {
@@ -76,6 +81,18 @@ async function loadTicket() {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadAgents() {
+    if (!authStore.isAgent && !authStore.isAdmin) return;
+    loadingAgents.value = true;
+    try {
+        agents.value = await ticketService.getAgents();
+    } catch (error) {
+        console.error('Error loading agents', error);
+    } finally {
+        loadingAgents.value = false;
+    }
 }
 
 async function handleDownload(fileId: number) {
@@ -133,6 +150,18 @@ async function handleAssignSelf() {
     }
 }
 
+async function handleAssignAgent() {
+    if (!selectedAgent.value) return;
+    try {
+        await ticketService.assignAgent(ticketId, Number(selectedAgent.value));
+        await loadTicket();
+        selectedAgent.value = '';
+    } catch (error) {
+        console.error('Error assigning agent', error);
+        alert('Error al reasignar el ticket.');
+    }
+}
+
 function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement;
   if (target.files) {
@@ -164,6 +193,9 @@ async function submitAnswer() {
 
 onMounted(() => {
   loadTicket();
+  if (authStore.isAgent || authStore.isAdmin) {
+      loadAgents();
+  }
 });
 </script>
 
@@ -199,6 +231,16 @@ onMounted(() => {
              <BaseButton v-if="canResolve" @click="handleResolve" variant="primary" size="sm">Resolver</BaseButton>
              <BaseButton v-if="canClose" @click="handleClose" variant="danger" size="sm">Cerrar</BaseButton>
              <BaseButton v-if="canRestore" @click="handleRestore" variant="secondary" size="sm">Restaurar</BaseButton>
+          </div>
+
+          <!-- Agent Assignment (Extra Bar for Admins/Agents) -->
+          <div v-if="(authStore.isAdmin || authStore.isAgent) && ticket && ticket.status !== 'closed'" class="border-t border-gray-200 px-4 py-3 bg-gray-50 flex items-center justify-end space-x-3 sm:px-6">
+               <label class="text-xs font-medium text-gray-700">Reasignar a:</label>
+               <select v-model="selectedAgent" class="block w-48 pl-3 pr-10 py-1 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md h-8">
+                   <option value="" disabled>Seleccionar Agente</option>
+                   <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
+               </select>
+               <BaseButton @click="handleAssignAgent" :disabled="!selectedAgent" variant="secondary" size="sm">Asignar</BaseButton>
           </div>
           
           <div class="border-t border-gray-200 px-4 py-5 sm:px-6">

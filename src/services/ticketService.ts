@@ -76,8 +76,17 @@ export default {
         return api.post(`/tickets/${ticketId}/addAgent`);
     },
 
+    async assignAgent(ticketId: number, agentId: number) {
+        return api.post(`/tickets/${ticketId}/assign`, { agent_id: agentId });
+    },
+
+    async getAgents() {
+        const response = await api.get('/agents');
+        return response.data;
+    },
+
     async downloadFile(fileId: number) {
         const response = await api.get(`/files/${fileId}/download`);
-        return response.data; // { url: "..." }
+        return response.data; // Expected { url: "..." }
     }
 };

@@ -86,7 +86,8 @@ onMounted(() => {
        <select v-model="filters.status" class="block w-full sm:w-40 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
          <option value="">Estado (Todos)</option>
          <option value="open">Abierto</option>
-         <option value="in_progress">En Progreso</option>
+         <option value="in progress">En Progreso</option>
+         <option value="pending">Pendiente</option>
          <option value="resolved">Resuelto</option>
          <option value="closed">Cerrado</option>
        </select>
