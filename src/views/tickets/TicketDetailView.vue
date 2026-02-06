@@ -26,7 +26,6 @@ const ticketId = Number(route.params.id);
 
 // Agent Loading
 const agents = ref<{id: number, name: string}[]>([]);
-const selectedAgent = ref<string | number>('');
 const loadingAgents = ref(false);
 
 // --- Computed Logic for ACL & Lifecycle ---
@@ -126,41 +125,35 @@ async function handleRestore() {
 }
 
 async function handleAssignSelf() {
-     // Assuming endpoint for self-assign is post or patch.
-     // Backend docs: PATCH /api/tickets/{id}/addAgent (Auto-assign)
-     // ticketService needs to call this.
-    // We already implemented addMessage, need to check if we implemented `addAgent` interaction correctly.
-    // Let's assume standard update logic or specific service method.
-    // We need to add `addAgent` to ticketService if not present, checking manually...
-    // I missed adding `addAgent` to ticketService in the file creation step. I will implement a generic call here or update service later.
-    // For now, I'll use direct API call pattern or assume it exists. 
-    // Wait, I can't edit the service file easily without a new task. I will assume it's missing and handle logically.
-    // Actually, I can use the existing `updateTicket` if it supported it, but it's a specific endpoint.
-    // I will simulate it via direct axios call or assume I will fix service.
-    // Let's stick to the plan: I will assume `ticketService.addAgent(ticketId)` exists or I'll add it in next step.
-    // To be safe, I'll implement the logic in the component temporarily or specific axios call.
-    // Better: I will use `ticketService.updateTicket` alias if I mapped it, or just generic api call. 
-    // Ah, I see `addMessage` in service but not `addAgent`.
-    // I will execute API call directly here for now to ensure progress.
+    if (!authStore.user?.id) return;
     try {
-        await ticketService.addAgent(ticketId); // I'll ensure to add this method to the service file next.
+        await ticketService.assignAgent(ticketId, authStore.user.id);
         await loadTicket();
-    } catch (e) {
-        alert('Error al asignar agente');
+    } catch (error) {
+        console.error('Error auto-assigning', error);
+        alert('Error al tomar el ticket.');
     }
 }
 
-async function handleAssignAgent() {
-    if (!selectedAgent.value) return;
+async function handleAssignFromDropdown(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const agentId = target.value;
+    
+    // If empty value selected (unassign?) - Service might not support it yet, assuming re-assign or nothing.
+    // If 'Sin Asignar' (value="") is selected, we might need a detach endpoint or similar.
+    // For now assuming we just assign. If agentId is empty, we might skip or handle unassign.
+    if (!agentId) return; 
+
     try {
-        await ticketService.assignAgent(ticketId, Number(selectedAgent.value));
+        await ticketService.assignAgent(ticketId, Number(agentId));
         await loadTicket();
-        selectedAgent.value = '';
     } catch (error) {
         console.error('Error assigning agent', error);
-        alert('Error al reasignar el ticket.');
+        alert('Error al asignar el agente.');
     }
 }
+
+
 
 function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement;
@@ -233,15 +226,7 @@ onMounted(() => {
              <BaseButton v-if="canRestore" @click="handleRestore" variant="secondary" size="sm">Restaurar</BaseButton>
           </div>
 
-          <!-- Agent Assignment (Extra Bar for Admins/Agents) -->
-          <div v-if="(authStore.isAdmin || authStore.isAgent) && ticket && ticket.status !== 'closed'" class="border-t border-gray-200 px-4 py-3 bg-gray-50 flex items-center justify-end space-x-3 sm:px-6">
-               <label class="text-xs font-medium text-gray-700">Reasignar a:</label>
-               <select v-model="selectedAgent" class="block w-48 pl-3 pr-10 py-1 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md h-8">
-                   <option value="" disabled>Seleccionar Agente</option>
-                   <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
-               </select>
-               <BaseButton @click="handleAssignAgent" :disabled="!selectedAgent" variant="secondary" size="sm">Asignar</BaseButton>
-          </div>
+
           
           <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
               <dl class="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
@@ -250,8 +235,38 @@ onMounted(() => {
                       <dd class="mt-1 text-sm text-gray-900">{{ ticket.customer.name }}</dd>
                   </div>
                   <div class="sm:col-span-1">
-                       <dt class="text-sm font-medium text-gray-500">Agente Asignado</dt>
-                       <dd class="mt-1 text-sm text-gray-900">{{ ticket.agent?.name || 'Sin asignar' }}</dd>
+                       <dt class="text-sm font-medium text-gray-500 self-center">Agente Asignado</dt>
+                       <dd class="mt-1 text-sm text-gray-900">
+                           <!-- Admin: Always show Dropdown -->
+                           <div v-if="authStore.isAdmin" class="flex items-center space-x-2">
+                               <select 
+                                   :value="ticket.agent?.id || ''" 
+                                   @change="handleAssignFromDropdown($event)" 
+                                   class="block w-full text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md h-8 p-1 border"
+                               >
+                                   <option value="">Sin Asignar</option>
+                                   <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+                                       {{ agent.name }}
+                                   </option>
+                               </select>
+                           </div>
+
+                           <!-- Agent: Show Button if Unassigned -->
+                           <div v-else-if="authStore.isAgent && !ticket.agent" class="flex items-center">
+                               <span class="mr-2 text-gray-500 italic">Sin asignar</span>
+                               <button 
+                                   @click="handleAssignSelf" 
+                                   class="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                               >
+                                   Tomar Ticket
+                               </button>
+                           </div>
+
+                           <!-- Default: Static Text (Agent assigned or Customer view) -->
+                           <span v-else>
+                               {{ ticket.agent?.name || 'Sin asignar' }}
+                           </span>
+                       </dd>
                   </div>
                   
                   <div class="sm:col-span-2">
