@@ -186,6 +186,7 @@ async function submitAnswer() {
 
 onMounted(() => {
   loadTicket();
+  // Always try to load agents if allowed, to populate the dropdown for Admin or potentially map names later
   if (authStore.isAgent || authStore.isAdmin) {
       loadAgents();
   }
@@ -237,12 +238,12 @@ onMounted(() => {
                   <div class="sm:col-span-1">
                        <dt class="text-sm font-medium text-gray-500 self-center">Agente Asignado</dt>
                        <dd class="mt-1 text-sm text-gray-900">
-                           <!-- Admin: Always show Dropdown -->
+                           <!-- Business Rule: Admins always have full control (Dropdown) -->
                            <div v-if="authStore.isAdmin" class="flex items-center space-x-2">
                                <select 
                                    :value="ticket.agent?.id || ''" 
                                    @change="handleAssignFromDropdown($event)" 
-                                   class="block w-full text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md h-8 p-1 border"
+                                   class="block w-full text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md h-8 p-1 border bg-white"
                                >
                                    <option value="">Sin Asignar</option>
                                    <option v-for="agent in agents" :key="agent.id" :value="agent.id">
@@ -251,19 +252,20 @@ onMounted(() => {
                                </select>
                            </div>
 
-                           <!-- Agent: Show Button if Unassigned -->
+                           <!-- Business Rule: Agents can only 'Take' unassigned tickets (Button) -->
                            <div v-else-if="authStore.isAgent && !ticket.agent" class="flex items-center">
                                <span class="mr-2 text-gray-500 italic">Sin asignar</span>
                                <button 
                                    @click="handleAssignSelf" 
-                                   class="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                   class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm"
                                >
                                    Tomar Ticket
                                </button>
                            </div>
 
-                           <!-- Default: Static Text (Agent assigned or Customer view) -->
-                           <span v-else>
+                           <!-- Default: Static Text (Assigned to self/other or Customer view) -->
+                           <span v-else class="flex items-center font-medium">
+                               <UserCircleIcon class="h-5 w-5 text-gray-400 mr-2" />
                                {{ ticket.agent?.name || 'Sin asignar' }}
                            </span>
                        </dd>

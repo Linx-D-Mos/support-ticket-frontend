@@ -82,7 +82,8 @@ export default {
 
     async getAgents() {
         const response = await api.get('/agents');
-        return response.data;
+        // Handle Laravel API Resource wrapper (response.data.data) or simple array (response.data)
+        return response.data.data || response.data;
     },
 
     async downloadFile(fileId: number) {
