@@ -45,13 +45,13 @@ const canResolve = computed(() => {
   if (!ticket.value) return false;
   // Agent can resolve if assigned or generally allowed? Assuming agents can resolve any ticket for MVP
   // Admin can always resolve
-  return (authStore.isAgent || authStore.isAdmin) && ticket.value.status === 'open';
+  return (authStore.isAgent || authStore.isAdmin) && ticket.value.status !== 'closed' && ticket.value.status !== 'resolved' && ticket.value.status !== 'open';
 });
 
 const canClose = computed(() => {
   // Usually same as resolve, or specifically from resolved -> closed
   if (!ticket.value) return false;
-  return (authStore.isAgent || authStore.isAdmin) && ticket.value.status !== 'closed';
+  return (authStore.isCustomer || authStore.isAdmin) && ticket.value.status !== 'closed';
 });
 
 const canRestore = computed(() => {
@@ -124,27 +124,16 @@ async function handleRestore() {
     await loadTicket();
 }
 
-async function handleAssignSelf() {
-    if (!authStore.user?.id) return;
-    try {
-        await ticketService.assignAgent(ticketId, authStore.user.id);
-        await loadTicket();
-    } catch (error) {
-        console.error('Error auto-assigning', error);
-        alert('Error al tomar el ticket.');
-    }
-}
+// ... importaciones ...
 
 async function handleAssignFromDropdown(event: Event) {
     const target = event.target as HTMLSelectElement;
     const agentId = target.value;
     
-    // If empty value selected (unassign?) - Service might not support it yet, assuming re-assign or nothing.
-    // If 'Sin Asignar' (value="") is selected, we might need a detach endpoint or similar.
-    // For now assuming we just assign. If agentId is empty, we might skip or handle unassign.
     if (!agentId) return; 
 
     try {
+        // ADMIN: Usa PUT /assign
         await ticketService.assignAgent(ticketId, Number(agentId));
         await loadTicket();
     } catch (error) {
@@ -153,6 +142,18 @@ async function handleAssignFromDropdown(event: Event) {
     }
 }
 
+async function handleAssignSelf() {
+    if (!authStore.user?.id) return;
+    try {
+        // AGENTE: Usa POST /addAgent (Corregido para usar el método correcto)
+        // Nota: Pasamos el ID del usuario actual
+        await ticketService.addAgent(ticketId, authStore.user.id);
+        await loadTicket();
+    } catch (error) {
+        console.error('Error auto-assigning', error);
+        alert('Error al tomar el ticket.');
+    }
+}
 
 
 function handleFileChange(event: Event) {

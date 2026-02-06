@@ -76,12 +76,12 @@ export default {
         return api.post(`/tickets/${ticketId}/addAgent`);
     },
 
-    async assignAgent(ticketId: number, agentId: number) {
-        return api.post(`/tickets/${ticketId}/assign`, { agent_id: agentId });
+    async assignAgent(ticketId: number, agent_id: number) {
+        return api.put(`/tickets/${ticketId}/assign`, { agent_id: agent_id });
     },
 
     async getAgents() {
-        const response = await api.get('/agents');
+        const response = await api.get('/users?rol=agent&all=true');
         // Handle Laravel API Resource wrapper (response.data.data) or simple array (response.data)
         return response.data.data || response.data;
     },
@@ -91,3 +91,4 @@ export default {
         return response.data; // Expected { url: "..." }
     }
 };
+ 
