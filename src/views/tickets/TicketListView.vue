@@ -122,10 +122,10 @@ onMounted(() => {
               </thead>
               <tbody class="divide-y divide-gray-200 bg-white">
                 <tr v-if="loading">
-                   <td colspan="6" class="text-center py-4 text-gray-500">Cargando tickets...</td>
+                   <td colspan="7" class="text-center py-4 text-gray-500">Cargando tickets...</td>
                 </tr>
                 <tr v-else-if="tickets.length === 0">
-                    <td colspan="6" class="text-center py-4 text-gray-500">No se encontraron tickets.</td>
+                    <td colspan="7" class="text-center py-4 text-gray-500">No se encontraron tickets.</td>
                 </tr>
                 <tr v-for="ticket in tickets" :key="ticket.id" class="hover:bg-gray-50">
                   <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">#{{ ticket.id }}</td>

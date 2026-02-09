@@ -3,13 +3,16 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import utc from 'dayjs/plugin/utc';
 import { useAuthStore } from '@/stores/auth';
 import ticketService, { type Ticket } from '@/services/ticketService';
 import StatusBadge from '@/components/tickets/StatusBadge.vue';
 import PriorityBadge from '@/components/tickets/PriorityBadge.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
+import BaseInput from '@/components/base/BaseInput.vue';
 import { PaperClipIcon, UserCircleIcon } from '@heroicons/vue/24/outline';
 
+dayjs.extend(utc);
 dayjs.extend(relativeTime);
 
 const route = useRoute();
@@ -21,11 +24,18 @@ const loading = ref(true);
 const newAnswer = ref('');
 const answerFiles = ref<File[]>([]);
 const sendingAnswer = ref(false);
+const isEditing = ref(false);
+const updatingTicket = ref(false);
+
+const editForm = ref({
+  title: '',
+  priority: ''
+});
 
 const ticketId = Number(route.params.id);
 
 // Agent Loading
-const agents = ref<{id: number, name: string}[]>([]);
+const agents = ref<{ id: number, name: string }[]>([]);
 const loadingAgents = ref(false);
 
 // --- Computed Logic for ACL & Lifecycle ---
@@ -33,9 +43,10 @@ const loadingAgents = ref(false);
 const canEdit = computed(() => {
   if (!ticket.value) return false;
   if (authStore.isAdmin) return true;
-  if (authStore.isCustomer && ticket.value.customer.id === authStore.user?.id) {
+  if (authStore.isCustomer && Number(ticket.value.customer.id) === Number(authStore.user?.id)) {
     if (!ticket.value.created_at) return false;
-    const diff = dayjs().diff(dayjs(ticket.value.created_at), 'minute');
+    // Usamos UTC para evitar desfases de zona horaria entre servidor y cliente
+    const diff = dayjs.utc().diff(dayjs.utc(ticket.value.created_at), 'minute');
     return diff <= 10;
   }
   return false;
@@ -43,15 +54,15 @@ const canEdit = computed(() => {
 
 const canResolve = computed(() => {
   if (!ticket.value) return false;
-  // Agent can resolve if assigned or generally allowed? Assuming agents can resolve any ticket for MVP
-  // Admin can always resolve
-  return (authStore.isAgent || authStore.isAdmin) && ticket.value.status !== 'closed' && ticket.value.status !== 'resolved' && ticket.value.status !== 'open';
+  if (ticket.value.status === 'closed' || ticket.value.status === 'resolved') return false;
+  
+  return authStore.isAgent || authStore.isAdmin;
 });
 
 const canClose = computed(() => {
   // Usually same as resolve, or specifically from resolved -> closed
   if (!ticket.value) return false;
-  return (authStore.isCustomer || authStore.isAdmin) && ticket.value.status !== 'closed';
+  return (authStore.isCustomer || authStore.isAgent || authStore.isAdmin) && ticket.value.status !== 'closed';
 });
 
 const canRestore = computed(() => {
@@ -124,6 +135,27 @@ async function handleRestore() {
     await loadTicket();
 }
 
+function startEdit() {
+  if (!ticket.value) return;
+  editForm.value.title = ticket.value.title;
+  editForm.value.priority = ticket.value.priority;
+  isEditing.value = true;
+}
+
+async function handleUpdate() {
+  updatingTicket.value = true;
+  try {
+    await ticketService.updateTicket(ticketId, editForm.value);
+    isEditing.value = false;
+    await loadTicket();
+  } catch (error) {
+    console.error('Error updating ticket', error);
+    alert('Error al actualizar el ticket.');
+  } finally {
+    updatingTicket.value = false;
+  }
+}
+
 // ... importaciones ...
 
 async function handleAssignFromDropdown(event: Event) {
@@ -169,8 +201,8 @@ async function submitAnswer() {
     try {
         const formData = new FormData();
         formData.append('body', newAnswer.value);
-        answerFiles.value.forEach((file, index) => {
-            formData.append(`files[${index}]`, file);
+        answerFiles.value.forEach((file) => {
+            formData.append('files[]', file);
         });
         
         await ticketService.addMessage(ticketId, formData);
@@ -219,9 +251,12 @@ onMounted(() => {
           
            <!-- Actions Bar -->
           <div class="border-t border-gray-200 px-4 py-3 bg-gray-50 text-right space-x-3 sm:px-6">
-             <span v-if="canEdit" class="text-xs text-blue-600 mr-2">Puedes editar (tiempo restante &lt; 10m)</span>
-             <BaseButton v-if="canEdit" variant="white" size="sm">Editar</BaseButton>
-             
+             <BaseButton 
+                v-if="canEdit" 
+                @click="router.push({ name: 'edit-ticket', params: { id: ticket.id } })" 
+                variant="white" 
+                size="sm"
+             >Editar</BaseButton>
              <BaseButton v-if="canAssignSelf" @click="handleAssignSelf" variant="secondary" size="sm">Tomar Ticket</BaseButton>
              <BaseButton v-if="canResolve" @click="handleResolve" variant="primary" size="sm">Resolver</BaseButton>
              <BaseButton v-if="canClose" @click="handleClose" variant="danger" size="sm">Cerrar</BaseButton>
@@ -232,6 +267,21 @@ onMounted(() => {
           
           <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
               <dl class="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
+                  <div v-if="isEditing" class="sm:col-span-2 space-y-4">
+                      <div>
+                          <label class="block text-sm font-medium text-gray-700">Título</label>
+                          <BaseInput v-model="editForm.title" class="mt-1" />
+                      </div>
+                      <div>
+                          <label class="block text-sm font-medium text-gray-700">Prioridad</label>
+                          <select v-model="editForm.priority" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border">
+                              <option value="low">Baja</option>
+                              <option value="medium">Media</option>
+                              <option value="high">Alta</option>
+                              <option value="urgent">Urgente</option>
+                          </select>
+                      </div>
+                  </div>
                   <div class="sm:col-span-1">
                       <dt class="text-sm font-medium text-gray-500">Solicitante</dt>
                       <dd class="mt-1 text-sm text-gray-900">{{ ticket.customer.name }}</dd>
