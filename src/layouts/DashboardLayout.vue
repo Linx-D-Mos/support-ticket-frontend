@@ -8,6 +8,7 @@ import {
   ArrowRightOnRectangleIcon,
   Bars3Icon,
 } from '@heroicons/vue/24/outline';
+import NotificationBell from '@/components/NotificationBell.vue';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -69,9 +70,18 @@ function handleLogout() {
                {{ item.name }}
              </router-link>
           </nav>
+          </nav>
         </div>
         <div class="flex-shrink-0 flex border-t border-gray-200 p-4">
-          <button @click="handleLogout" class="flex-shrink-0 w-full group block">
+             <!-- Notification Bell in Sidebar for Mobile/Desktop if desired, but usually header is better. 
+                  However, keeping the requested structure. 
+                  Wait, the plan said "top right header". 
+                  The layout has a desktop sidebar and a mobile header.
+                  I need to find a place for the bell.
+                  Let's check the Main Content area structure in DashboardLayout.vue
+             -->
+             <!-- Actually I will insert it after the sidebar user logic -->
+             <button @click="handleLogout" class="flex-shrink-0 w-full group block">
             <div class="flex items-center">
               <div>
                 <ArrowRightOnRectangleIcon class="inline-block h-9 w-9 rounded-full text-gray-400 p-1 bg-gray-100" />
@@ -92,11 +102,14 @@ function handleLogout() {
 
     <!-- Main Content -->
     <div class="lg:pl-64 flex flex-col min-h-screen">
-      <div class="sticky top-0 z-10 flex-shrink-0 flex h-16 bg-white shadow lg:hidden">
+      <div class="sticky top-0 z-10 flex-shrink-0 flex h-16 bg-white shadow justify-between items-center px-4 sm:px-6 lg:px-8">
         <button type="button" class="px-4 border-r border-gray-200 text-gray-500 focus:outline-none lg:hidden" @click="sidebarOpen = true">
           <span class="sr-only">Open sidebar</span>
           <Bars3Icon class="h-6 w-6" aria-hidden="true" />
         </button>
+        <div class="flex-1 flex justify-end">
+            <NotificationBell />
+        </div>
       </div>
 
       <main class="flex-1">

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import ticketService, { type Ticket, type TicketParams } from '@/services/ticketService';
+import echo from '@/echo';
 import StatusBadge from '@/components/tickets/StatusBadge.vue';
 import PriorityBadge from '@/components/tickets/PriorityBadge.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
@@ -13,7 +14,7 @@ const loading = ref(true);
 const meta = ref<any>({});
 
 // Filters
-const filters = ref<TicketParams>({
+const filters = ref({
   page: 1,
   status: '',
   priority: '',
@@ -56,6 +57,24 @@ watch(() => filters.value.priority, () => {
 
 onMounted(() => {
   loadTickets();
+
+  echo.private('admins')
+      .listen('.TicketCreated', (event: any) => {
+          console.log('Ticket Created Event:', event);
+          // Assuming the event payload contains the ticket object directly or in a 'ticket' property
+          // Standard Laravel BroadcastWith or public property
+          const newTicket = event.ticket || event;
+          
+          // Verify it matches Ticket interface roughly or just push it
+          // Ideally we should check if it matches current filters but for now request says "prepend to array"
+          tickets.value.unshift(newTicket);
+          
+          // Optional: Update meta total if we want to be precise, but usually for infinite scroll or live lists we just prepend
+      });
+});
+
+onUnmounted(() => {
+    echo.leave('admins');
 });
 </script>
 
