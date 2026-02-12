@@ -17,7 +17,7 @@ const echo = new Echo({
     authorizer: (channel: any) => {
         return {
             authorize: (socketId: string, callback: Function) => {
-                axios.post('http://localhost/broadcasting/auth', {
+                axios.post(import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL.replace('/api', '')}/broadcasting/auth` : 'http://localhost/broadcasting/auth', {
                     socket_id: socketId,
                     channel_name: channel.name
                 }, {
@@ -27,13 +27,13 @@ const echo = new Echo({
                         'Accept': 'application/json'
                     }
                 })
-                .then(response => {
-                    callback(false, response.data);
-                })
-                .catch(error => {
-                    console.error('❌ Error Auth:', error);
-                    callback(true, error);
-                });
+                    .then(response => {
+                        callback(false, response.data);
+                    })
+                    .catch(error => {
+                        console.error('❌ Error Auth:', error);
+                        callback(true, error);
+                    });
             }
         };
     },
