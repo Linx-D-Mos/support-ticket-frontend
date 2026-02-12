@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -11,6 +11,7 @@ import PriorityBadge from '@/components/tickets/PriorityBadge.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
 import { PaperClipIcon, UserCircleIcon } from '@heroicons/vue/24/outline';
+import echo from '@/echo';
 
 dayjs.extend(utc);
 dayjs.extend(relativeTime);
@@ -179,7 +180,7 @@ async function handleAssignSelf() {
     try {
         // AGENTE: Usa POST /addAgent (Corregido para usar el método correcto)
         // Nota: Pasamos el ID del usuario actual
-        await ticketService.addAgent(ticketId, authStore.user.id);
+        await ticketService.addAgent(ticketId);
         await loadTicket();
     } catch (error) {
         console.error('Error auto-assigning', error);
@@ -217,12 +218,65 @@ async function submitAnswer() {
     }
 }
 
+
+
 onMounted(() => {
   loadTicket();
   // Always try to load agents if allowed, to populate the dropdown for Admin or potentially map names later
   if (authStore.isAgent || authStore.isAdmin) {
       loadAgents();
   }
+
+  // Real-time listener
+  const channel = echo.private(`ticket.${ticketId}`);
+  
+  channel.listen('.AnswerCreated', (e: any) => {
+      console.log('Answer received:', e);
+      if (!ticket.value) return;
+      if (!ticket.value.answers) ticket.value.answers = [];
+      
+      // Map payload to Answer interface
+      const newAnswerEncoded = {
+          id: e.id,
+          body: e.body,
+          created_at: e.created_at,
+          user: {
+              id: e.sender_id,
+              name: e.sender_name 
+          },
+          files: e.files || [] 
+      };
+      
+      // Avoid duplicates just in case
+      if (!ticket.value.answers.find((a: any) => a.id === newAnswerEncoded.id)) {
+          ticket.value.answers.push(newAnswerEncoded);
+      }
+  })
+  // Fallback listener in case event name is different (e.g. namespaced or 'tickets.answer')
+  .listen('tickets.answer', (e: any) => {
+       console.log('Answer received (custom event):', e);
+       if (!ticket.value) return;
+       if (!ticket.value.answers) ticket.value.answers = [];
+       
+       const newAnswerEncoded = {
+          id: e.id,
+          body: e.body,
+          created_at: e.created_at,
+          user: {
+              id: e.sender_id,
+              name: e.sender_name 
+          },
+          files: e.files || [] 
+      };
+
+       if (!ticket.value.answers.find((a: any) => a.id === newAnswerEncoded.id)) {
+          ticket.value.answers.push(newAnswerEncoded);
+      }
+  });
+});
+
+onUnmounted(() => {
+    echo.leave(`ticket.${ticketId}`);
 });
 </script>
 
@@ -270,7 +324,7 @@ onMounted(() => {
                   <div v-if="isEditing" class="sm:col-span-2 space-y-4">
                       <div>
                           <label class="block text-sm font-medium text-gray-700">Título</label>
-                          <BaseInput v-model="editForm.title" class="mt-1" />
+                          <BaseInput id="edit-title" v-model="editForm.title" class="mt-1" />
                       </div>
                       <div>
                           <label class="block text-sm font-medium text-gray-700">Prioridad</label>
