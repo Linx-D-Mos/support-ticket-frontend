@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -27,6 +27,10 @@ const answerFiles = ref<File[]>([]);
 const sendingAnswer = ref(false);
 const isEditing = ref(false);
 const updatingTicket = ref(false);
+const activeUsers = ref<any[]>([]);
+const typingUser = ref<string | null>(null);
+let typingTimer: any = null;
+const chatContainer = ref<HTMLElement | null>(null);
 
 const editForm = ref({
   title: '',
@@ -83,14 +87,14 @@ const canAssignSelf = computed(() => {
 
 // --- Actions ---
 
-async function loadTicket() {
-  loading.value = true;
+async function loadTicket(showLoading = true) {
+  if (showLoading) loading.value = true;
   try {
     ticket.value = await ticketService.getTicket(ticketId);
   } catch (error) {
     console.error('Failed to load ticket', error);
   } finally {
-    loading.value = false;
+    if (showLoading) loading.value = false;
   }
 }
 
@@ -121,19 +125,19 @@ async function handleDownload(fileId: number) {
 async function handleResolve() {
     if (!confirm('¿Marcar ticket como resuelto?')) return;
     await ticketService.resolveTicket(ticketId);
-    await loadTicket();
+    await loadTicket(false);
 }
 
 async function handleClose() {
     if (!confirm('¿Cerrar ticket definitivamente?')) return;
     await ticketService.closeTicket(ticketId);
-    await loadTicket();
+    await loadTicket(false);
 }
 
 async function handleRestore() {
     if (!confirm('¿Restaurar ticket?')) return;
     await ticketService.restoreTicket(ticketId);
-    await loadTicket();
+    await loadTicket(false);
 }
 
 function startEdit() {
@@ -148,7 +152,7 @@ async function handleUpdate() {
   try {
     await ticketService.updateTicket(ticketId, editForm.value);
     isEditing.value = false;
-    await loadTicket();
+    await loadTicket(false);
   } catch (error) {
     console.error('Error updating ticket', error);
     alert('Error al actualizar el ticket.');
@@ -168,7 +172,7 @@ async function handleAssignFromDropdown(event: Event) {
     try {
         // ADMIN: Usa PUT /assign
         await ticketService.assignAgent(ticketId, Number(agentId));
-        await loadTicket();
+        await loadTicket(false);
     } catch (error) {
         console.error('Error assigning agent', error);
         alert('Error al asignar el agente.');
@@ -181,7 +185,7 @@ async function handleAssignSelf() {
         // AGENTE: Usa POST /addAgent (Corregido para usar el método correcto)
         // Nota: Pasamos el ID del usuario actual
         await ticketService.addAgent(ticketId);
-        await loadTicket();
+        await loadTicket(false);
     } catch (error) {
         console.error('Error auto-assigning', error);
         alert('Error al tomar el ticket.');
@@ -196,6 +200,25 @@ function handleFileChange(event: Event) {
   }
 }
 
+const scrollToTop = async () => {
+    // Esperamos a que Vue termine de renderizar el nuevo mensaje en el DOM
+    await nextTick();
+
+    if (chatContainer.value) {
+        chatContainer.value.scrollTo({
+            top: 0,
+            behavior: 'smooth' // Movimiento fluido
+        });
+    }
+};
+
+const handleTyping = () => {
+    echo.join(`ticket.${ticketId}`)
+        .whisper('typing', {
+            name: authStore.user?.name
+        });
+};
+
 async function submitAnswer() {
     if (!newAnswer.value.trim()) return;
     sendingAnswer.value = true;
@@ -209,7 +232,8 @@ async function submitAnswer() {
         await ticketService.addMessage(ticketId, formData);
         newAnswer.value = '';
         answerFiles.value = [];
-        await loadTicket();
+        await loadTicket(false);
+        scrollToTop();
     } catch (error) {
         console.error('Failed to post answer', error);
          alert('Error al enviar respuesta.');
@@ -227,56 +251,56 @@ onMounted(() => {
       loadAgents();
   }
 
-  // Real-time listener
-  const channel = echo.private(`ticket.${ticketId}`);
-  
-  channel.listen('.AnswerCreated', (e: any) => {
-      console.log('Answer received:', e);
-      if (!ticket.value) return;
-      if (!ticket.value.answers) ticket.value.answers = [];
-      
-      // Map payload to Answer interface
-      const newAnswerEncoded = {
-          id: e.id,
-          body: e.body,
-          created_at: e.created_at,
-          user: {
-              id: e.sender_id,
-              name: e.sender_name 
-          },
-          files: e.files || [] 
-      };
-      
-      // Avoid duplicates just in case
-      if (!ticket.value.answers.find((a: any) => a.id === newAnswerEncoded.id)) {
-          ticket.value.answers.push(newAnswerEncoded);
-      }
-  })
-  // Fallback listener in case event name is different (e.g. namespaced or 'tickets.answer')
-  .listen('tickets.answer', (e: any) => {
-       console.log('Answer received (custom event):', e);
-       if (!ticket.value) return;
-       if (!ticket.value.answers) ticket.value.answers = [];
-       
-       const newAnswerEncoded = {
-          id: e.id,
-          body: e.body,
-          created_at: e.created_at,
-          user: {
-              id: e.sender_id,
-              name: e.sender_name 
-          },
-          files: e.files || [] 
-      };
+    // 1. Canal Privado: Escuchar mensajes nuevos (Backend: PrivateChannel)
+    echo.private(`ticket.${ticketId}`)
+        .listen('.App\\Events\\TicketMessageSent', (e: any) => {
+            console.log('📨 ¡Mensaje de chat recibido!', e);
+            if (!ticket.value) return;
+            if (!ticket.value.answers) ticket.value.answers = [];
 
-       if (!ticket.value.answers.find((a: any) => a.id === newAnswerEncoded.id)) {
-          ticket.value.answers.push(newAnswerEncoded);
-      }
-  });
+            const newMessage = {
+                id: e.id,
+                body: e.body,
+                created_at: e.created_at,
+                user: {
+                    id: e.sender_id,
+                    name: e.sender_name,
+                    rol: e.sender_rol.name,
+                },
+                files: e.files || []
+            };
+
+            const exists = ticket.value.answers.some((a: any) => a.id === newMessage.id);
+            if (!exists) {
+                ticket.value.answers.unshift(newMessage);
+                scrollToTop();
+            }
+        });
+
+    // 2. Canal de Presencia: Usuarios online y Typing (Backend: PresenceChannel)
+    echo.join(`ticket.${ticketId}`)
+        .here((users: any[]) => {
+            activeUsers.value = users;
+        })
+        .joining((user: any) => {
+            activeUsers.value.push(user);
+        })
+        .leaving((user: any) => {
+            activeUsers.value = activeUsers.value.filter((u: any) => u.id !== user.id);
+        })
+        .listenForWhisper('typing', (e: any) => {
+            typingUser.value = e.name;
+            if (typingTimer) clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                typingUser.value = null;
+            }, 3000);
+        });
 });
 
 onUnmounted(() => {
-    echo.leave(`ticket.${ticketId}`);
+    // Desconectar de ambos canales explícitamente
+    echo.leave(`private-ticket.${ticketId}`);
+    echo.leave(`presence-ticket.${ticketId}`);
 });
 </script>
 
@@ -296,6 +320,16 @@ onUnmounted(() => {
                   <p class="mt-1 max-w-2xl text-sm text-gray-500">
                       Reportado el {{ dayjs(ticket.created_at).format('DD/MM/YYYY HH:mm') }}
                   </p>
+                    <div v-if="activeUsers.length > 0" class="mt-2 flex items-center">
+                        <span class="text-xs text-gray-500 mr-2">En línea:</span>
+                        <div class="flex -space-x-1 overflow-hidden">
+                            <div v-for="user in activeUsers" :key="user.id" 
+                                class="inline-flex items-center justify-center h-6 w-6 rounded-full ring-2 ring-white bg-indigo-100"
+                                :title="user.name">
+                                <span class="text-xs font-medium text-indigo-800">{{ user.name ? user.name.charAt(0).toUpperCase() : '?' }}</span>
+                            </div>
+                        </div>
+                    </div>
               </div>
               <div class="flex space-x-2">
                   <StatusBadge :status="ticket.status" />
@@ -402,8 +436,11 @@ onUnmounted(() => {
       <!-- Answers Section -->
       <div class="bg-gray-50 p-4 rounded-lg">
           <h4 class="text-lg font-medium text-gray-900 mb-4">Respuestas</h4>
+            <div v-if="typingUser" class="text-sm text-gray-500 italic mb-2 px-1">
+                <span class="animate-pulse">...</span> {{ typingUser }} está escribiendo
+            </div>
           
-          <div class="space-y-4">
+            <div ref="chatContainer" class="answers-container space-y-4 max-h-[600px] overflow-y-auto p-4">
               <div v-if="!ticket.answers || ticket.answers.length === 0" class="text-center text-gray-500 py-4">
                   No hay respuestas aún.
               </div>
@@ -448,7 +485,7 @@ onUnmounted(() => {
                      rows="3"
                      class="shadow-sm block w-full focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border border-gray-300 rounded-md p-2"
                      placeholder="Escribe tu respuesta..."
-                     required
+                     required @input="handleTyping"
                    ></textarea>
                    
                    <div class="mt-3 flex items-center justify-between">
