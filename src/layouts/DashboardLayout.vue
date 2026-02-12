@@ -70,7 +70,6 @@ function handleLogout() {
                {{ item.name }}
              </router-link>
           </nav>
-          </nav>
         </div>
         <div class="flex-shrink-0 flex border-t border-gray-200 p-4">
              <!-- Notification Bell in Sidebar for Mobile/Desktop if desired, but usually header is better. 

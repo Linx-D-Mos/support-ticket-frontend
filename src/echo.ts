@@ -1,12 +1,6 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
-
-declare global {
-    interface Window {
-        Pusher: any;
-        Echo: any;
-    }
-}
+import axios from 'axios';
 
 window.Pusher = Pusher;
 
@@ -18,6 +12,31 @@ const echo = new Echo({
     wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
     forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
     enabledTransports: ['ws', 'wss'],
+
+    // ⚡️ EL SECRETO: Usar un authorizer manual para garantizar JSON
+    authorizer: (channel: any) => {
+        return {
+            authorize: (socketId: string, callback: Function) => {
+                axios.post('http://localhost/broadcasting/auth', {
+                    socket_id: socketId,
+                    channel_name: channel.name
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                        'Content-Type': 'application/json', // <--- ESTO ES LO QUE FALTABA
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(response => {
+                    callback(false, response.data);
+                })
+                .catch(error => {
+                    console.error('❌ Error Auth:', error);
+                    callback(true, error);
+                });
+            }
+        };
+    },
 });
 
 export default echo;

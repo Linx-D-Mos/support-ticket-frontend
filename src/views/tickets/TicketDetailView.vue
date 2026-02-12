@@ -54,7 +54,7 @@ const canEdit = computed(() => {
 
 const canResolve = computed(() => {
   if (!ticket.value) return false;
-  if (ticket.value.status === 'closed' || ticket.value.status === 'resolved') return false;
+  if (ticket.value.status === 'closed' || ticket.value.status === 'resolved' || ticket.value.status === 'open') return false;
   
   return authStore.isAgent || authStore.isAdmin;
 });

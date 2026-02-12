@@ -50,7 +50,7 @@ const countUnread = () => {
 const handleNotificationClick = async (notification: Notification) => {
     if (!notification.read_at) {
         try {
-            await fileApi.put(`/notifications/${notification.id}/read`);
+            await fileApi.patch(`/notifications/${notification.id}/read`);
             notification.read_at = new Date().toISOString();
             countUnread();
         } catch (error) {
@@ -60,6 +60,12 @@ const handleNotificationClick = async (notification: Notification) => {
     
     if (notification.data.ticket_id) {
         router.push({ name: 'ticket-detail', params: { id: notification.data.ticket_id } });
+    } else if (notification.data.link) {
+        if (notification.data.link.startsWith('http')) {
+            window.location.href = notification.data.link;
+        } else {
+            router.push(notification.data.link);
+        }
     }
 
     closeDropdown();
@@ -87,25 +93,23 @@ onMounted(() => {
 
   if (authStore.user?.id) {
     echo.private(`App.Models.User.${authStore.user.id}`)
-      .listen('Illuminate\\Notifications\\Events\\BroadcastNotificationCreated', (event: any) => {
-        console.log('Notification received:', event);
-        
-        // Structure depends on how Laravel broadcasts the notification
-        // Usually event is the notification data itself + id + type
-        const newNotification: Notification = {
-            id: event.id,
-            data: event, // Or event.data depending on structure
-            created_at: new Date().toISOString(),
-            read_at: null
-        };
-
-        notifications.value.unshift(newNotification);
-        unreadCount.value++;
-        
-        // Show Toast
-        const message = event.message || 'New Notification';
-        showToast(message);
-      });
+    .notification((notification: any) => {
+      // Normalizamos la extracción de datos ya que Laravel puede enviarlos en la raíz o en .data
+      const newNotification: Notification = {
+        id: notification.id || notification.data?.id,
+        data: {
+          title: notification.title || notification.data?.title,
+          message: notification.message || notification.data?.message,
+          link: notification.link || notification.data?.link,
+          ticket_id: notification.ticket_id || notification.data?.ticket_id
+        },
+        created_at: notification.created_at || new Date().toISOString(),
+        read_at: null
+      };
+      notifications.value.unshift(newNotification);
+      countUnread();
+      showToast(newNotification.data.title);
+    });
   }
 });
 

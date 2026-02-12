@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import './assets/main.css'
 import App from './App.vue'
 import router from './router'
+import axios from 'axios'
 
 const app = createApp(App)
 
@@ -10,3 +11,5 @@ app.use(createPinia())
 app.use(router)
 
 app.mount('#app')
+// main.ts o bootstrap.js
+axios.defaults.headers.common['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
