@@ -94,6 +94,12 @@ onMounted(() => {
   if (authStore.user?.id) {
     echo.private(`App.Models.User.${authStore.user.id}`)
     .notification((notification: any) => {
+      // Si la notificación fue generada por el mismo usuario, la ignoramos
+      const senderId = notification.sender_id || notification.data?.sender_id;
+      if (senderId && Number(senderId) === Number(authStore.user?.id)) {
+        return;
+      }
+
       // Normalizamos la extracción de datos ya que Laravel puede enviarlos en la raíz o en .data
       const newNotification: Notification = {
         id: notification.id || notification.data?.id,
