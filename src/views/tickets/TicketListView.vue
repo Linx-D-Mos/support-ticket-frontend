@@ -78,39 +78,24 @@ onMounted(() => {
       .listen('.App\\Events\\TicketUpdated', (event: any) => {
         const updatedTicket = event.ticket;
         const index = tickets.value.findIndex(t => t.id === updatedTicket.id);
-        const currentUserId = authStore.user?.id ? Number(authStore.user.id) : null;
-
-        if (authStore.isAgent) {
-          const isAssignedToMe = updatedTicket.agent && Number(updatedTicket.agent.id) === currentUserId;
-
-          if (index !== -1) {
-            if (isAssignedToMe) {
-              tickets.value[index] = updatedTicket;
-            } else {
-              // Ya no soy el agente de este ticket, quitar de la lista
-              tickets.value.splice(index, 1);
-            }
-          } else if (isAssignedToMe) {
-            // Ahora soy el agente y no estaba en mi lista, añadirlo
-            tickets.value.unshift(updatedTicket);
-          }
-        } else if (index !== -1) {
-          // Comportamiento para Admin: solo actualizar si ya existe
+        if(index !== -1 ){
           tickets.value[index] = updatedTicket;
+        } else {
+          tickets.value.unshift(updatedTicket);
         }
       });
-  } else {
-
-    if (authStore.isCustomer) {
-      echo.private(`App.Models.User.${authStore.user?.id}`)
-        .listen('.App\\Events\\TicketUpdated', (event: any) => {
-          const index = tickets.value.findIndex(t => t.id === event.ticket.id);
-          if (index !== -1) {
-            tickets.value[index] = event.ticket;
-          }
-        })
-    }
   }
+  echo.private(`App.Models.User.${authStore.user?.id}`)
+    .listen('.App\\Events\\TicketUpdated', (event: any) => {
+      const index = tickets.value.findIndex(t => t.id === event.ticket.id);
+      if (index !== -1) {
+        tickets.value[index] = event.ticket;
+      }
+    })
+    .listen('.App\\Events\\TicketAgentRevoke', (event: any) => {
+      tickets.value = tickets.value.filter(t => t.id !== event.ticket_id);
+    })
+
 });
 onUnmounted(() => {
   if (authStore.isAdmin || authStore.isAgent) {
@@ -189,7 +174,7 @@ onUnmounted(() => {
                 </tr>
                 <tr v-for="ticket in tickets" :key="ticket.id" class="hover:bg-gray-50">
                   <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">#{{ ticket.id
-                  }}</td>
+                    }}</td>
                   <td class="px-3 py-4 text-sm text-gray-500">{{ ticket.title }}</td>
                   <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                     <StatusBadge :status="ticket.status" />
@@ -199,7 +184,7 @@ onUnmounted(() => {
                   </td>
                   <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ ticket.customer.name }}</td>
                   <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ ticket.agent?.name || 'No asignado'
-                    }}
+                  }}
                   </td>
                   <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                     <router-link :to="{ name: 'ticket-detail', params: { id: ticket.id } }"

@@ -83,7 +83,7 @@ const canRestore = computed(() => {
 });
 
 const canAssignSelf = computed(() => {
-    return authStore.isAgent && !ticket.value?.agent;
+    return authStore.isAgent && !ticket.value?.agent && ticket.value?.status !== 'closed';
 });
 
 // --- Actions ---
@@ -243,78 +243,20 @@ async function submitAnswer() {
     }
 }
 
-
-
-// onMounted(async () => {
-//     // 1. Cargamos el ticket primero para asegurar que tenemos el ID
-//     await loadTicket();
-
-//     if (authStore.isAgent || authStore.isAdmin) {
-//         loadAgents();
-//     }
-
-//     // 2. UNA SOLA CONEXIÓN al canal de presencia
-//     echo.join(`ticket.${ticketId}`)
-//         .here((users: any[]) => {
-//             activeUsers.value = users;
-//         })
-//         .joining((user: any) => {
-//             if (!activeUsers.value.find(u => u.id === user.id)) activeUsers.value.push(user);
-//         })
-//         .leaving((user: any) => {
-//             activeUsers.value = activeUsers.value.filter((u: any) => u.id !== user.id);
-//         })
-//         // Escuchamos Mensajes de Chat
-//         .listen('.App\\Events\\TicketMessageSent', (e: any) => {
-//             console.log('📨 Mensaje recibido');
-//             const newMessage = {
-//                 id: e.id,
-//                 body: e.body,
-//                 created_at: e.created_at,
-//                 user: { id: e.sender_id, name: e.sender_name, rol: { name: e.sender_rol } },
-//                 files: e.files || []
-//             };
-//             const exists = ticket.value?.answers.some((a: any) => a.id === newMessage.id);
-//             if (!exists) {
-//                 ticket.value?.answers.unshift(newMessage);
-//                 scrollToTop();
-//             }
-//         })
-//         // Escuchamos Cambios de Estado/Agente (Badge)
-//         .listen('.App\\Events\\TicketUpdated', (e: any) => {
-//             console.log('🔄 Update recibido:', e.ticket);
-//             // Esto actualizará el StatusBadge y el Agente automáticamente
-//             ticket.value = { ...ticket.value, ...e.ticket };
-//         })
-//         // Escuchamos el "Escribiendo..."
-//         .listenForWhisper('typing', (e: any) => {
-//             typingUser.value = e.name;
-//             if (typingTimer) clearTimeout(typingTimer);
-//             typingTimer = setTimeout(() => { typingUser.value = null; }, 3000);
-//         });
-// });
-
-// onUnmounted(() => {
-//     // Al salir, cerramos la conexión única
-//     echo.leave(`ticket.${ticketId}`);
-// });
 onMounted(() => {
     loadTicket();
     // Always try to load agents if allowed, to populate the dropdown for Admin or potentially map names later
     if (authStore.isAgent || authStore.isAdmin) {
         loadAgents();
     }
-
-    if(authStore.isAgent){
-        echo.private(`App.Models.User.${authStore.user?.id}`)
-        .listen(`App\\Events\\TicketAgentRevoke`, (e: any) =>{
+    echo.private(`App.Models.User.${authStore.user?.id}`)
+        .listen(`.App\\Events\\TicketAgentRevoke`, (e: any) => {
             console.log('Evento de revocación recibido:', e);
-            if(ticket.value?.id === e.ticket_id){
+            if (ticket.value?.id === e.ticket_id) {
                 alert("Tu asignacion a este ticket ha sido revocada.");
-                router.push({name : 'dashboard'});
-            } 
+                router.push({ name: 'dashboard' });
+            }
         });
-    }
     // 1. Canal Privado: Escuchar mensajes nuevos (Backend: PrivateChannel)
     echo.private(`ticket.${ticketId}`)
         .listen('.App\\Events\\TicketMessageSent', (e: any) => {
@@ -445,8 +387,9 @@ onUnmounted(() => {
                     <div class="sm:col-span-1">
                         <dt class="text-sm font-medium text-gray-500 self-center">Agente Asignado</dt>
                         <dd class="mt-1 text-sm text-gray-900">
-                            <!-- Business Rule: Admins always have full control (Dropdown) -->
-                            <div v-if="authStore.isAdmin" class="flex items-center space-x-2">
+                            <!-- Business Rule: Admins have control (Dropdown) unless ticket is closed -->
+                            <div v-if="authStore.isAdmin && ticket.status !== 'closed'"
+                                class="flex items-center space-x-2">
                                 <select :value="ticket.agent?.id || ''" @change="handleAssignFromDropdown($event)"
                                     class="block w-full text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md h-8 p-1 border bg-white">
                                     <option value="">Sin Asignar</option>
@@ -457,7 +400,7 @@ onUnmounted(() => {
                             </div>
 
                             <!-- Business Rule: Agents can only 'Take' unassigned tickets (Button) -->
-                            <div v-else-if="authStore.isAgent && !ticket.agent" class="flex items-center">
+                            <div v-else-if="canAssignSelf" class="flex items-center">
                                 <span class="mr-2 text-gray-500 italic">Sin asignar</span>
                                 <button @click="handleAssignSelf"
                                     class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm">
