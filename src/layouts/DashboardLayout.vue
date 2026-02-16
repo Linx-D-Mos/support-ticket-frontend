@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -14,10 +15,17 @@ const authStore = useAuthStore();
 const router = useRouter();
 const sidebarOpen = ref(false);
 
-const navigation = [
-  { name: 'Dashboard', href: 'dashboard', icon: HomeIcon },
-  { name: 'Tickets', href: 'tickets', icon: TicketIcon },
-];
+const navigation = computed(() => {
+  const nav = [
+    { name: 'Tickets', href: 'tickets', icon: TicketIcon },
+  ];
+
+  if (authStore.isAdmin) {
+    nav.unshift({ name: 'Dashboard', href: 'dashboard', icon: HomeIcon });
+  }
+
+  return nav;
+});
 
 function handleLogout() {
   authStore.logout();

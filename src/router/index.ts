@@ -24,6 +24,7 @@ const router = createRouter({
                     path: '',
                     name: 'dashboard',
                     component: () => import('@/views/DashboardView.vue'),
+                    meta: { requiredRole: 'admin' }
                 },
                 {
                     path: 'tickets',
@@ -58,9 +59,17 @@ router.beforeEach((to, from, next) => {
         return next({ name: 'login' });
     }
 
-    // Guard 2: Redirect authenticated user from login to dashboard
+    // Guard 2: Check Role Requirement
+    if (to.meta.requiredRole && authStore.user?.rol?.name !== to.meta.requiredRole) {
+        return next({ name: 'tickets' });
+    }
+
+    // Guard 3: Redirect authenticated user from login to dashboard or tickets based on role
     if (to.name === 'login' && authStore.isAuthenticated) {
-        return next({ name: 'dashboard' });
+        if (authStore.isAdmin) {
+            return next({ name: 'dashboard' });
+        }
+        return next({ name: 'tickets' });
     }
 
     next();
